@@ -1,9 +1,4 @@
-Team025:
-Zhaoran Yang    email: zyang625@gatech.edu
-HaiYong Gao     email: hgao303@gatech.edu
-Ronghui Zhou    email: rzhou301/rzhou11@gatech.edu
-Swati Prasad    email: sprasad60@gatech.edu
-PengFei Huang   email: phuang98@gatech.edu
+
 
 SQL code used in our project:
 
