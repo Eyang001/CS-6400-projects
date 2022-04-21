@@ -1,0 +1,238 @@
+Team025:
+Zhaoran Yang    email: zyang625@gatech.edu
+HaiYong Gao     email: hgao303@gatech.edu
+Ronghui Zhou    email: rzhou301/rzhou11@gatech.edu
+Swati Prasad    email: sprasad60@gatech.edu
+PengFei Huang   email: phuang98@gatech.edu
+
+SQL code used in our project:
+
+--View City
+
+SELECT * FROM city ORDER BY city_name ASC LIMIT $offset, $no_of_records_per_page
+
+--View Holiday
+SELECT * FROM holiday ORDER BY date ASC LIMIT $offset, $no_of_records_per_page
+
+
+--View Date
+SELECT * FROM date ORDER BY date ASC LIMIT $offset, $no_of_records_per_page
+
+
+--Update Childcare
+      --Populate Drop-down List for store number
+SELECT DISTINCT(store_number) FROM store WHERE childcare_time != 0
+      -- Update Childcare Limit time for selected store
+UPDATE store SET childcare_time = '$limit_time' WHERE store_number = '$store_number'
+
+
+--Update City Population
+      --Populate Drop-down List for state and city name
+SELECT state, city_name From city
+      --Update population for selected city
+UPDATE city SET population = '$population' WHERE city_name = '$city' and state = '$state'
+
+--Insert New Holiday
+      --Populate Drop-down List for Date
+SELECT a.date as available_date FROM date a NATURAL LEFT JOIN holiday b WHERE b.date IS NULL ORDER BY a.date ASC
+      --Insert new holiday for selected date
+INSERT INTO holiday ( name , date) VALUES ("'.$holiday_name.'", "'.$holiday_date.'" )
+
+
+--Report 1
+SELECT B.category_name AS category_name, COUNT(P.PID) AS Total_Number, MIN(P.retail_Price) AS Min_Price, FORMAT(AVG(P.retail_Price),2) AS Avg_Price, FORMAT(MAX(P.retail_Price),2) AS Max_Price 
+FROM product AS P, category AS C LEFT OUTER JOIN belongs_to AS B 
+ON C.category_name = B.category_name 
+WHERE B.PID = P.PID 
+GROUP BY C.category_name 
+ORDER BY C.category_name ASC
+
+
+--Report 2              
+SELECT r.PID as PID, r.product_name As PName, FORMAT(r.Retail_price,2) AS Retail_Price, r.rsold+d.dsold AS Units_sold_total, r.rsold As Unites_sold_as_retail, d.dsold As Units_sold_on_discount, 
+              FORMAT(r.Sale_Retail + d.Sale_discount,2) AS Actual_Rev,
+              FORMAT(r.Sale_Retail + d.dsold*r.Retail_price*.75,2) AS Predicted_Rev, 
+              FORMAT(d.Sale_discount - d.dsold*r.Retail_price*.75,2) AS Diff
+                            FROM (SELECT p.PID AS PID, p.product_name, p.retail_Price AS Retail_price, SUM(s.quantity) AS rsold, 	
+                                  SUM(p.retail_Price*s.quantity) AS Sale_Retail
+                                  FROM belongs_to AS bt NATURAL JOIN product AS p NATURAL JOIN sold as s 
+                                  LEFT OUTER JOIN fordiscount AS fd
+                                  ON (p.PID = fd.PID AND s.date = fd.date)
+                                  WHERE bt.category_name = "Couches and Sofas" AND fd.discounted_price IS NULL
+                                  GROUP BY p.PID
+                                   ) r
+                                  
+                                  NATURAL JOIN
+                                  
+                                  (SELECT p.PID as PID, p.product_name, SUM(s.quantity) AS dsold,
+                                   SUM(fd.discounted_price*s.quantity) AS Sale_discount
+                                  FROM belongs_to AS bt NATURAL JOIN product AS p NATURAL JOIN sold as s
+                                  LEFT OUTER JOIN fordiscount AS fd
+                                  ON (p.PID = fd.PID AND s.date = fd.date)
+                                  WHERE bt.category_name = "Couches and Sofas" AND fd.discounted_price IS NOT NULL 
+                                  GROUP BY p.PID                 	
+                                  ) d
+                                  
+                                  WHERE d.Sale_discount - d.dsold*r.Retail_price*.75 > 5000 OR d.Sale_discount - d.dsold*r.Retail_price*.75 < -5000
+                                  ORDER BY d.Sale_discount - d.dsold*r.Retail_price*.75 DESC;   
+
+
+
+--Report 3
+
+ -- user select state
+SELECT DISTINCT store.state FROM store
+ -- query run based on the state selected by the user
+SELECT st.store_number AS Store_ID, st.address AS Address, st.city_name AS City, YEAR(s.date) AS Year, FORMAT(s.quantity * IFNULL(fd.discounted_price, p.retail_Price),2) AS Revenue
+									FROM store st NATURAL JOIN (
+										(sold s NATURAL JOIN product p ) LEFT OUTER JOIN fordiscount fd ON (
+										s.PID = fd.PID AND
+										s.date = fd.date)
+										)
+									WHERE st.state = '$state'
+									GROUP BY Store_ID, Year
+									ORDER BY Year ASC, Revenue DESC;
+
+
+
+--Report 4
+SELECT a.asold_year AS sold_year, a.atotal_yearly_sold AS total_yearly_sold, ROUND(a.atotal_yearly_sold / 365) AS avg_yearly_sold, b.groundhog_day_sold
+
+FROM
+
+(SELECT YEAR(s.date) AS asold_year, SUM(s.quantity) AS atotal_yearly_sold
+ FROM sold AS s NATURAL JOIN belongs_to AS bt
+ WHERE bt.category_name = 'Outdoor Furniture'
+GROUP BY Year(s.date)
+) a
+ 
+ INNER JOIN
+ 
+ (SELECT Year(s.date) AS bsold_year, SUM(s.quantity) AS groundhog_day_sold
+  FROM sold AS s NATURAL JOIN belongs_to AS bt
+ WHERE bt.category_name = 'Outdoor Furniture' AND DAY(s.date) = 2 AND MONTH(s.date) = 2 
+ GROUP BY bsold_year
+ ) b
+
+ON a.asold_year = b.bsold_year
+
+GROUP BY sold_year 
+ORDER BY sold_year ASC;
+
+
+--Report 5
+ -- user select month and year
+SELECT DISTINCT (DATE_FORMAT(date, '%m / %Y')) AS avalible_month FROM sold ORDER BY avalible_month ASC
+ -- query run based on the month and year selected by the user
+SELECT b.Category_Name, b.Max_Qty_sold, c.State
+									FROM
+									(SELECT a.Category_Name, MAX(a.Qty_sold) AS Max_Qty_sold FROM( SELECT SUM(S1.quantity) AS Qty_sold, B.category_name AS Category_Name, S2.state AS State FROM sold as S1 INNER JOIN belongs_to AS B ON S1.PID = B.PID INNER JOIN store AS S2 ON S1.store_number = S2.store_number WHERE MONTH(S1.date) = '$month_date' AND YEAR(S1.date) = '$month_year'
+									GROUP BY Category_Name, State ORDER BY Category_Name ASC) a GROUP BY a.Category_Name) b
+									,
+									(SELECT SUM(S1.quantity) AS Qty_sold, B.category_name AS Category_Name, S2.state AS State FROM sold as S1 INNER JOIN belongs_to AS B ON S1.PID = B.PID INNER JOIN store AS S2 ON S1.store_number = S2.store_number
+									WHERE MONTH(S1.date) = '$month_date' AND YEAR(S1.date) = '$month_year'
+									GROUP BY Category_Name, State ORDER BY Category_Name ASC) c
+									WHERE b.Max_Qty_sold = c.Qty_sold AND b.Category_Name = c.Category_Name
+
+
+--Report 6
+SELECT *,
+CASE
+WHEN Population < 3700000 THEN 'Small'
+WHEN Population >= 3700000 AND Population < 6700000 THEN 'Medium'
+WHEN Population >= 6700000 AND Population < 9000000 THEN 'Large'
+ELSE 'ExtraLarge'
+END AS city_category
+FROM(
+SELECT a.Year, FORMAT((a.Revenue + b.Revenue),2) AS Revenue, a.Population
+FROM
+(SELECT Year(S1.date) as Year, C.city_name AS City_Name, C.state AS State, sum(S1.quantity*P.retail_Price) AS Revenue, C.population AS Population 
+FROM sold AS S1 
+JOIN product AS P ON S1.PID = P.PID 
+JOIN store AS S2 ON S1.store_number = S2.store_number 
+JOIN city AS C ON S2.city_name = C.city_name AND S2.state = C.state 
+WHERE S1.PID NOT IN (SELECT PID FROM fordiscount) AND S1.date IN (SELECT date FROM fordiscount)
+GROUP BY Year(S1.date), C.city_name, C.state 
+ORDER BY Year(S1.date) ASC, Population ASC) a
+LEFT OUTER JOIN
+(SELECT Year(S1.date) as Year, C.city_name AS City_Name, C.state AS State, sum(S1.quantity*F.discounted_price) AS Revenue, C.population AS Population 
+FROM fordiscount AS F,
+sold AS S1 
+JOIN product AS P ON S1.PID = P.PID 
+JOIN store AS S2 ON S1.store_number = S2.store_number 
+JOIN city AS C ON S2.city_name = C.city_name AND S2.state = C.state 
+WHERE S1.PID = F.PID and S1.date = F.date
+GROUP BY Year(S1.date), C.city_name, C.state 
+ORDER BY Year(S1.date) ASC, Population ASC) b
+ON a.Year = b.Year AND a.City_Name = b.City_Name AND a.State = b.State AND a.Population = b.Population
+ORDER BY a.Year ASC, a.Population ASC) as T
+
+
+--Report 7
+SELECT Year(s.date) AS year, Month(s.date) AS month, 
+IF(st.childcare_time=0,'No_childcare',st.childcare_time) AS limit_time, FORMAT(SUM(s.quantity * IFNULL(fd.discounted_price, p.retail_Price)),2) AS sale
+              FROM (sold AS s NATURAL JOIN product AS p)
+              INNER JOIN fordiscount as fd ON s.PID = fd.PID
+              LEFT OUTER JOIN store AS st ON s.store_number = st.store_number
+              WHERE s.date IN
+(
+select  s.date FROM sold as s  where  s.date < (select max(s.date) FROM sold s  ) and
+    s.date > ((select (max(s.date)- INTERVAL 12 month) as new1 FROM sold s  ))
+    )
+              GROUP BY month, limit_time
+              ORDER BY year ASC, month ASC, st.childcare_time ASC
+
+--Report 8
+SELECT B.category_name AS Category,
+CASE
+WHEN S2.has_restaurant = 0 THEN 'Non-restaurant' ELSE 'Restaurant'
+END AS Store_Type,
+sum(S1.quantity) AS Quantity_Sold
+FROM sold AS S1, belongs_to AS B, store AS S2
+WHERE S1. PID = B.PID AND S1.store_number = S2.store_number
+GROUP BY B.category_name, S2.has_restaurant
+ORDER BY Category ASC, Store_Type ASC
+
+
+--Report 9
+SELECT * FROM (
+	SELECT a.aPID AS Product_ID, a.aname AS Product_Name, a.Q_during_ac AS Sold_During_Campaign, b.Q_outside_ac AS Sold_Outside_Campaign, 
+	(a.Q_during_ac - b.Q_outside_ac) AS Difference
+	FROM
+	(SELECT sold.PID AS aPID, product.product_name AS aname, sum(sold.quantity) AS Q_during_ac
+	FROM sold INNER JOIN product
+	ON sold.PID = product.PID
+	 WHERE  sold.date IN (SELECT advertising_campaign.date FROM advertising_campaign)
+	GROUP BY sold.PID
+	) a
+	INNER JOIN 
+	(SELECT sold.PID AS bPID, product.product_name AS bname, sum(sold.quantity) AS Q_outside_ac
+	FROM sold INNER JOIN product
+	ON sold.PID = product.PID
+	 WHERE  sold.date NOT IN (SELECT advertising_campaign.date FROM advertising_campaign)
+	GROUP BY sold.PID) b
+	ON a.aPID = b.bPID
+	ORDER BY Difference DESC LIMIT 10) a
+	
+	UNION
+	
+	SELECT * FROM (
+	SELECT a.aPID AS Product_ID, a.aname AS Product_Name, a.Q_during_ac AS Sold_During_Campaign, b.Q_outside_ac AS Sold_Outside_Campaign, 
+	(a.Q_during_ac - b.Q_outside_ac) AS Difference
+	FROM 
+	(SELECT sold.PID AS aPID, product.product_name AS aname, sum(sold.quantity) AS Q_during_ac
+	FROM sold INNER JOIN product
+	ON sold.PID = product.PID
+	 WHERE  sold.date IN (SELECT advertising_campaign.date FROM advertising_campaign)
+	GROUP BY sold.PID
+	) a
+	INNER JOIN 
+	(SELECT sold.PID AS bPID, product.product_name AS bname, sum(sold.quantity) AS Q_outside_ac
+	FROM sold INNER JOIN product
+	ON sold.PID = product.PID
+	 WHERE  sold.date NOT IN (SELECT advertising_campaign.date FROM advertising_campaign)
+	GROUP BY sold.PID) b
+	ON a.aPID = b.bPID
+	ORDER BY Difference ASC LIMIT 10) b;
+
+
